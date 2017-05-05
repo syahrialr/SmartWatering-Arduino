@@ -1,7 +1,14 @@
 #include <DHT.h>
 #include <SPI.h>
 #include <Ethernet.h>
+#include <Scheduler.h>
+#include <virtuabotixRTC.h>
 
+//Inisialisasi pin (CLK, DAT, RST)
+virtuabotixRTC myRTC(6,7,8);
+
+int Relay = 7;
+int relay_level=300;
 
 byte sensorInterrupt = 0;
 byte sensorPin = 2;
@@ -18,8 +25,6 @@ unsigned long oldTime;
 
 #define DHTPIN 3
 #define DHTTYPE DHT11   // DHT 11
-
-
 
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -38,6 +43,13 @@ void setup() {
   // Open serial communications
   Serial.begin(9600);
 
+  //penulisan data pertama kali dan disarankan saat transfer
+  //ke-2 ini tidak digunakan dikarenakan akan menghapus data
+  //sebelumnya
+  //myRTC.setDS1302Time(00,45,13,6,28,4,2017);
+  //detik, menit, jam, hari dalam seminggu, tanggal, bulan, tahun
+  // 00:59:23 "Rabu" 7-September-2016
+
   // start the Ethernet connection and the server
   Ethernet.begin(mac, ip);
   dht.begin();
@@ -51,23 +63,54 @@ void setup() {
   oldTime           = 0;
 
   attachInterrupt(sensorInterrupt, pulseCounter, FALLING);
-
-  // Pin 22 - 24 output (leds)
-  pinMode(5, OUTPUT);
-  pinMode(6, OUTPUT);
-  pinMode(7, OUTPUT);
-
-
-
 }
 
 
 void loop() {
+
+  //memanggil fungsi untuk update data waktu
+  myRTC.updateTime();
+ 
+  //penulisan data pada serial monitor komputer
+  Serial.print("Current Date / Time: ");
+  //fungsi penulisan data untuk tanggal
+  Serial.print(myRTC.dayofmonth);
+ 
+  //penulisan data "/" sebagai separator
+  Serial.print("/");
+ 
+  //fungsi penulisan data untuk bulan
+  Serial.print(myRTC.month);
+ 
+  //penulisan data "/" sebagai separator
+  Serial.print("/");
+ 
+  //fungsi penulisan data untuk tahun
+  Serial.print(myRTC.year);
+ 
+  //penulisan data untuk jarak spasi
+  Serial.print(" ");
+ 
+  //fungsi penulisan data untuk jam
+  Serial.print(myRTC.hours);
+ 
+  Serial.print(":");
+ 
+  //fungsi penulisan data untuk menit
+  Serial.print(myRTC.minutes);
+ 
+  Serial.print(":");
+ 
+  //fungsi penulisan data untuk detik
+  Serial.println(myRTC.seconds);
+  delay( 5000);
+  
   // read the input on analog pin 0:
   int sensorValue = analogRead(A0); 
   String kondisisoil;
+  int solen;
   
-  
+  pinMode(Relay, OUTPUT);
   sensorValue = analogRead(A0);
   sensorValue = map(sensorValue,160,1023,1023,0);
   delay(100);
@@ -95,7 +138,7 @@ void loop() {
   //Humidity & Temp
   float h = dht.readHumidity();
   float t = dht.readTemperature();
- 
+
   
   if (client.connect(server, 80)) { 
     client.print("GET /write_data.php?");
@@ -110,6 +153,8 @@ void loop() {
     client.print("&&");
     client.print("sensorsoil=");
     client.print(sensorValue);
+    
+    
     
     if((millis() - oldTime) > 1000)
               {
@@ -131,8 +176,29 @@ void loop() {
                 attachInterrupt(sensorInterrupt, pulseCounter, FALLING);
               }
    
-    client.print("&&");
-    client.print("solenoid=");
+ if (sensorValue>=50)
+ {client.print("&&");
+    if (sensorValue > relay_level) {  
+      digitalWrite(Relay, HIGH);
+      client.print("solenoid=0");
+      delay(1000);
+    } else if (sensorValue < relay_level){
+      digitalWrite(Relay, LOW);
+      client.print("solenoid=1");
+      delay(1000);
+    }
+    else{
+      String buffer="";
+      if(buffer.indexOf("GET /?led1=1")>=0) { 
+            digitalWrite(Relay, HIGH);
+          }
+          if(buffer.indexOf("GET /?led1=0")>=0) {
+            digitalWrite(Relay, LOW); // led 2 > off
+          }
+    }
+    }
+
+    // wait for a minute
      
     client.println(" HTTP/1.1");
     client.println("Host: krstudio.web.id");
@@ -150,4 +216,8 @@ void loop() {
 }
 void pulseCounter(){
   pulseCount++;
+}
+void loop2()
+{
+  
 }
